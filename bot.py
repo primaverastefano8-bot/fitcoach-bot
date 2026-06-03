@@ -14,10 +14,19 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-SYSTEM_PROMPT = """Coach fitness esperto. Crea schede scientifiche personalizzate basate su principi di ipertrofia, forza e recupero muscolare. Scegli esercizi ottimali per ogni gruppo muscolare. Per ogni esercizio aggiungi link YouTube di ricerca. Rispondi SOLO con JSON valido. Solo ASCII. Max 4 esercizi/giorno, max 4 giorni.
+SYSTEM_PROMPT = """Sei un coach fitness. Crea schede scientifiche. Rispondi SOLO con JSON. Solo ASCII. Max 3 esercizi/giorno, max 4 giorni.
 
-JSON:
-{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"","focus":"","esercizi":[{"nome":"","serie":3,"ripetizioni":"","recupero":"","note":"","perche":"","video_tutorial":"https://www.youtube.com/results?search_query=nome+esercizio+tutorial"}]}]}"""
+{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":3,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"Lunedi","focus":"Petto","esercizi":[{"nome":"Panca","serie":3,"ripetizioni":"8-10","recupero":"90s","note":"tecnica corretta","perche":"esercizio base","video_tutorial":"https://www.youtube.com/results?search_query=panca+piana+tutorial"}]}]}"""
+
+
+def pulisci_json(testo):
+    testo = testo.replace("```json","").replace("```","").strip()
+    testo = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', testo)
+    testo = testo.replace('\u2019',"'").replace('\u201c','"').replace('\u201d','"')
+    match = re.search(r'\{.*\}', testo, re.DOTALL)
+    if not match:
+        raise ValueError("JSON non trovato")
+    return json.loads(match.group())
 
 
 def crea_excel(dati, nome_file):
@@ -157,7 +166,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     user_name = update.message.from_user.first_name
-    attesa = await update.message.reply_text("Sto creando la tua scheda personalizzata... circa 20 secondi!")
+    attesa = await update.message.reply_text("Sto creando la tua scheda... circa 20 secondi!")
 
     try:
         response = client.messages.create(
@@ -166,19 +175,16 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
             system=SYSTEM_PROMPT,
             messages=[{
                 "role": "user",
-                "content": "Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON valido."
+                "content": "Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON valido, solo ASCII."
             }]
         )
 
         testo = ""
         for b in response.content:
             if hasattr(b, "text"): testo += b.text
-        testo = testo.replace("```json","").replace("```","").strip()
 
         try:
-            match = re.search(r"\{.*\}", testo, re.DOTALL)
-            if not match: raise ValueError("no json")
-            dati = json.loads(match.group())
+            dati = pulisci_json(testo)
         except Exception:
             response2 = client.messages.create(
                 model="claude-sonnet-4-6",
@@ -186,16 +192,13 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 system=SYSTEM_PROMPT,
                 messages=[{
                     "role": "user",
-                    "content": "Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON. Max 3 esercizi, max 3 giorni."
+                    "content": "Crea scheda SEMPLICE per "+user_name+". Info: "+user_message+". SOLO JSON. Max 2 esercizi, max 3 giorni. Solo ASCII."
                 }]
             )
             testo2 = ""
             for b in response2.content:
                 if hasattr(b, "text"): testo2 += b.text
-            testo2 = testo2.replace("```json","").replace("```","").strip()
-            match2 = re.search(r"\{.*\}", testo2, re.DOTALL)
-            if not match2: raise ValueError("no json 2")
-            dati = json.loads(match2.group())
+            dati = pulisci_json(testo2)
 
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
             nome_file = tmp.name
