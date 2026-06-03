@@ -14,10 +14,10 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-SYSTEM_PROMPT = """Coach fitness esperto. Crea schede personalizzate. Per ogni esercizio cerca video YouTube. Rispondi SOLO con JSON valido. Solo ASCII nelle stringhe. Max 4 esercizi/giorno, max 4 giorni.
+SYSTEM_PROMPT = """Coach fitness esperto. Crea schede scientifiche personalizzate basate su principi di ipertrofia, forza e recupero muscolare. Scegli esercizi ottimali per ogni gruppo muscolare. Per ogni esercizio aggiungi link YouTube di ricerca. Rispondi SOLO con JSON valido. Solo ASCII. Max 4 esercizi/giorno, max 4 giorni.
 
-JSON richiesto:
-{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"","focus":"","esercizi":[{"nome":"","serie":3,"ripetizioni":"","recupero":"","note":"","perche":"","video_tutorial":"https://youtube.com/..."}]}]}"""
+JSON:
+{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"","focus":"","esercizi":[{"nome":"","serie":3,"ripetizioni":"","recupero":"","note":"","perche":"","video_tutorial":"https://www.youtube.com/results?search_query=nome+esercizio+tutorial"}]}]}"""
 
 
 def crea_excel(dati, nome_file):
@@ -144,7 +144,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- Giorni a settimana\n"
         "- Esperienza (principiante/intermedio/avanzato)\n"
         "- Infortuni o limitazioni\n\n"
-        "Riceverai un file Excel con scheda completa!"
+        "Riceverai un file Excel con la tua scheda completa!"
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -155,49 +155,54 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message=update.message.text
-    user_name=update.message.from_user.first_name
-    attesa=await update.message.reply_text("Sto creando la tua scheda personalizzata... circa 30 secondi!")
+    user_message = update.message.text
+    user_name = update.message.from_user.first_name
+    attesa = await update.message.reply_text("Sto creando la tua scheda personalizzata... circa 20 secondi!")
 
     try:
-        response=client.messages.create(
+        response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2000,
             system=SYSTEM_PROMPT,
-            tools=[{"type":"web_search_20250305","name":"web_search"}],
-            messages=[{"role":"user","content":"Crea scheda per "+user_name+". Info: "+user_message+". Rispondi SOLO con JSON valido."}]
+            messages=[{
+                "role": "user",
+                "content": "Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON valido."
+            }]
         )
 
-        testo=""
+        testo = ""
         for b in response.content:
-            if hasattr(b,"text"): testo+=b.text
-        testo=testo.replace("```json","").replace("```","").strip()
+            if hasattr(b, "text"): testo += b.text
+        testo = testo.replace("```json","").replace("```","").strip()
 
         try:
-            match=re.search(r"\{.*\}",testo,re.DOTALL)
+            match = re.search(r"\{.*\}", testo, re.DOTALL)
             if not match: raise ValueError("no json")
-            dati=json.loads(match.group())
+            dati = json.loads(match.group())
         except Exception:
-            response2=client.messages.create(
+            response2 = client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=2000,
+                max_tokens=1500,
                 system=SYSTEM_PROMPT,
-                messages=[{"role":"user","content":"Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON. Max 3 esercizi, max 3 giorni."}]
+                messages=[{
+                    "role": "user",
+                    "content": "Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON. Max 3 esercizi, max 3 giorni."
+                }]
             )
-            testo2=""
+            testo2 = ""
             for b in response2.content:
-                if hasattr(b,"text"): testo2+=b.text
-            testo2=testo2.replace("```json","").replace("```","").strip()
-            match2=re.search(r"\{.*\}",testo2,re.DOTALL)
+                if hasattr(b, "text"): testo2 += b.text
+            testo2 = testo2.replace("```json","").replace("```","").strip()
+            match2 = re.search(r"\{.*\}", testo2, re.DOTALL)
             if not match2: raise ValueError("no json 2")
-            dati=json.loads(match2.group())
+            dati = json.loads(match2.group())
 
-        with tempfile.NamedTemporaryFile(suffix=".xlsx",delete=False) as tmp:
-            nome_file=tmp.name
-        crea_excel(dati,nome_file)
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+            nome_file = tmp.name
+        crea_excel(dati, nome_file)
         await attesa.delete()
 
-        with open(nome_file,"rb") as f:
+        with open(nome_file, "rb") as f:
             await update.message.reply_document(
                 document=f,
                 filename="FitCoachPro_"+user_name+".xlsx",
@@ -211,12 +216,12 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("Errore: "+str(e))
 
 def main():
-    app=Application.builder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start",start))
-    app.add_handler(CommandHandler("help",help_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,crea_scheda))
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crea_scheda))
     print("Bot avviato!")
     app.run_polling()
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
