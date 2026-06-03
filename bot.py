@@ -14,9 +14,24 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-SYSTEM_PROMPT = """Sei un coach fitness. Crea schede scientifiche. Rispondi SOLO con JSON. Solo ASCII. Max 3 esercizi/giorno, max 4 giorni.
+SYSTEM_PROMPT = """Sei un coach fitness esperto. Crea schede di allenamento personalizzate e scientifiche.
 
-{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":3,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"Lunedi","focus":"Petto","esercizi":[{"nome":"Panca","serie":3,"ripetizioni":"8-10","recupero":"90s","note":"tecnica corretta","perche":"esercizio base","video_tutorial":"https://www.youtube.com/results?search_query=panca+piana+tutorial"}]}]}"""
+Processo:
+1. Cerca su internet schede esistenti per gli obiettivi dell'utente
+2. Cerca video YouTube dimostrativi per ogni esercizio
+3. Crea un programma ottimale combinando le migliori fonti
+
+Per ogni scheda includi:
+- Esercizi compound + isolamento bilanciati
+- Progressione di carico settimana per settimana
+- Note tecniche dettagliate per ogni esercizio
+- Spiegazione scientifica del perche ogni esercizio e stato scelto
+- Link YouTube per ogni esercizio
+
+Rispondi SOLO con JSON valido. Solo caratteri ASCII. Max 4 esercizi/giorno, max 5 giorni.
+
+Struttura JSON:
+{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"descrizione approccio scientifico","note_generali":"consigli nutrizione e recupero","progressione":"piano dettagliato settimane 1-8","giorni":[{"giorno":"Lunedi","focus":"Petto e Tricipiti","esercizi":[{"nome":"Panca Piana","serie":4,"ripetizioni":"6-8","recupero":"2-3 min","note":"schiena appoggiata discesa controllata 3 secondi","perche":"esercizio compound primario per petto massima attivazione fibre","video_tutorial":"https://www.youtube.com/results?search_query=panca+piana+tecnica+corretta"}]}]}"""
 
 
 def pulisci_json(testo):
@@ -147,84 +162,3 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Benvenuto in FitCoach Pro!\n\n"
         "Sono il tuo personal trainer AI.\n\n"
-        "Dimmi:\n"
-        "- Obiettivi (massa, forza, dimagrimento)\n"
-        "- Punti deboli (es. tricipiti scarsi)\n"
-        "- Giorni a settimana\n"
-        "- Esperienza (principiante/intermedio/avanzato)\n"
-        "- Infortuni o limitazioni\n\n"
-        "Riceverai un file Excel con la tua scheda completa!"
-    )
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Descrivimi la tua situazione!\n\n"
-        "Esempio: Ho i tricipiti carenti, mi alleno 4 giorni, livello intermedio, voglio massa.\n\n"
-        "Riceverai un Excel con la tua scheda!"
-    )
-
-async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
-    user_name = update.message.from_user.first_name
-    attesa = await update.message.reply_text("Sto creando la tua scheda... circa 20 secondi!")
-
-    try:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2000,
-            system=SYSTEM_PROMPT,
-            messages=[{
-                "role": "user",
-                "content": "Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON valido, solo ASCII."
-            }]
-        )
-
-        testo = ""
-        for b in response.content:
-            if hasattr(b, "text"): testo += b.text
-
-        try:
-            dati = pulisci_json(testo)
-        except Exception:
-            response2 = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=1500,
-                system=SYSTEM_PROMPT,
-                messages=[{
-                    "role": "user",
-                    "content": "Crea scheda SEMPLICE per "+user_name+". Info: "+user_message+". SOLO JSON. Max 2 esercizi, max 3 giorni. Solo ASCII."
-                }]
-            )
-            testo2 = ""
-            for b in response2.content:
-                if hasattr(b, "text"): testo2 += b.text
-            dati = pulisci_json(testo2)
-
-        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
-            nome_file = tmp.name
-        crea_excel(dati, nome_file)
-        await attesa.delete()
-
-        with open(nome_file, "rb") as f:
-            await update.message.reply_document(
-                document=f,
-                filename="FitCoachPro_"+user_name+".xlsx",
-                caption="Scheda pronta "+user_name+"!\n\n3 fogli:\n- Scheda Settimanale\n- Spiegazioni\n- Progressione\n\nClicca sui link per i video tutorial!"
-            )
-        os.unlink(nome_file)
-
-    except Exception as e:
-        await attesa.delete()
-        await update.message.reply_text("Si e verificato un errore. Riprova o scrivi /start")
-        print("Errore: "+str(e))
-
-def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crea_scheda))
-    print("Bot avviato!")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
