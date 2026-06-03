@@ -162,3 +162,85 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Benvenuto in FitCoach Pro!\n\n"
         "Sono il tuo personal trainer AI.\n\n"
+        "Dimmi:\n"
+        "- Obiettivi (massa, forza, dimagrimento)\n"
+        "- Punti deboli (es. tricipiti scarsi)\n"
+        "- Giorni a settimana\n"
+        "- Esperienza (principiante/intermedio/avanzato)\n"
+        "- Infortuni o limitazioni\n\n"
+        "Riceverai un file Excel con la tua scheda completa!"
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Descrivimi la tua situazione!\n\n"
+        "Esempio: Ho i tricipiti carenti, mi alleno 4 giorni, livello intermedio, voglio massa.\n\n"
+        "Riceverai un Excel con la tua scheda!"
+    )
+
+async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_message = update.message.text
+    user_name = update.message.from_user.first_name
+    attesa = await update.message.reply_text("Sto cercando le migliori schede e creando il tuo programma... circa 40 secondi!")
+
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=3000,
+            system=SYSTEM_PROMPT,
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            messages=[{
+                "role": "user",
+                "content": "Crea scheda completa per "+user_name+". Info: "+user_message+". Cerca schede esistenti e video YouTube per ogni esercizio. SOLO JSON valido, solo ASCII."
+            }]
+        )
+
+        testo = ""
+        for b in response.content:
+            if hasattr(b, "text"): testo += b.text
+
+        try:
+            dati = pulisci_json(testo)
+        except Exception:
+            response2 = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=2000,
+                system=SYSTEM_PROMPT,
+                messages=[{
+                    "role": "user",
+                    "content": "Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON valido, solo ASCII. Max 3 esercizi, max 3 giorni."
+                }]
+            )
+            testo2 = ""
+            for b in response2.content:
+                if hasattr(b, "text"): testo2 += b.text
+            dati = pulisci_json(testo2)
+
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+            nome_file = tmp.name
+        crea_excel(dati, nome_file)
+        await attesa.delete()
+
+        with open(nome_file, "rb") as f:
+            await update.message.reply_document(
+                document=f,
+                filename="FitCoachPro_"+user_name+".xlsx",
+                caption="Scheda pronta "+user_name+"!\n\n3 fogli:\n- Scheda Settimanale\n- Spiegazioni\n- Progressione\n\nClicca sui link per i video tutorial!"
+            )
+        os.unlink(nome_file)
+
+    except Exception as e:
+        await attesa.delete()
+        await update.message.reply_text("Si e verificato un errore. Riprova o scrivi /start")
+        print("Errore: "+str(e))
+
+def main():
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crea_scheda))
+    print("Bot avviato!")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
