@@ -14,25 +14,25 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-SYSTEM_PROMPT = """You are an expert fitness coach. Search online for existing workout plans and create a personalized scientific program. Reply ONLY with valid JSON. ASCII characters only, no accents or special characters. Max 4 exercises per day, max 5 days.
+SYSTEM_PROMPT = """You are an expert fitness coach. Search online for workout plans and create a personalized program. Reply ONLY with a valid JSON object. Use ONLY ASCII characters. No accents. No special chars. Keep all text values SHORT (max 10 words each).
 
-JSON structure:
-{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"Monday","focus":"Chest","esercizi":[{"nome":"Bench Press","serie":4,"ripetizioni":"6-8","recupero":"2 min","note":"keep back on bench","perche":"primary compound for chest"}]}]}"""
+Example of the EXACT format required:
+{"nome_utente":"John","obiettivo":"muscle gain","livello":"intermediate","giorni_settimana":4,"metodologia":"progressive overload hypertrophy","note_generali":"eat high protein sleep 8h","progressione":"add weight each week","giorni":[{"giorno":"Monday","focus":"Chest Triceps","esercizi":[{"nome":"Bench Press","serie":4,"ripetizioni":"6-8","recupero":"2min","note":"arch back control descent","perche":"primary chest compound"}]}]}"""
 
 
 def pulisci_json(testo):
     testo = testo.replace("```json","").replace("```","").strip()
     testo = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', testo)
-    testo = testo.replace('\u2019',"'").replace('\u201c','"').replace('\u201d','"')
-    testo = testo.replace('\u00e0','a').replace('\u00e8','e').replace('\u00e9','e')
-    testo = testo.replace('\u00ec','i').replace('\u00f2','o').replace('\u00f9','u')
-    testo = testo.replace('\u00c0','A').replace('\u00c8','E').replace('\u00c9','E')
+    for old,new in [('\u2019',"'"),('\u201c','"'),('\u201d','"'),('\u00e0','a'),('\u00e8','e'),('\u00e9','e'),('\u00ec','i'),('\u00f2','o'),('\u00f9','u'),('\u00c0','A'),('\u00c8','E'),('\u00c9','E'),('\u2013','-'),('\u2014','-')]:
+        testo = testo.replace(old,new)
     testo = re.sub(r',\s*}', '}', testo)
     testo = re.sub(r',\s*]', ']', testo)
     match = re.search(r'\{.*\}', testo, re.DOTALL)
     if not match:
         raise ValueError("JSON not found")
-    return json.loads(match.group())
+    raw = match.group()
+    raw = re.sub(r'[\x80-\xff]', '', raw)
+    return json.loads(raw)
 
 
 def crea_excel(dati, nome_file):
@@ -189,7 +189,7 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{
                 "role": "user",
-                "content": "Create a workout plan for "+user_name+". User info: "+user_message+". Search online for existing workout plans. Reply ONLY with valid JSON, ASCII characters only, no special characters, no accents."
+                "content": "Create workout plan for "+user_name+". Info: "+user_message+". Search online for workout plans. Reply ONLY with valid JSON. ASCII only. Max 10 words per text field. Max 4 exercises per day."
             }]
         )
 
@@ -200,14 +200,15 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         try:
             dati = pulisci_json(testo)
-        except Exception:
+        except Exception as e1:
+            print("Primo tentativo fallito: "+str(e1))
             response2 = client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=1500,
+                max_tokens=1000,
                 system=SYSTEM_PROMPT,
                 messages=[{
                     "role": "user",
-                    "content": "Create a simple workout plan for "+user_name+". Info: "+user_message+". ONLY valid JSON. Max 3 exercises, max 3 days. ASCII only."
+                    "content": "Create workout plan for "+user_name+". Info: "+user_message+". ONLY JSON. Max 3 exercises, max 3 days. ASCII only. Max 8 words per field."
                 }]
             )
             testo2 = ""
