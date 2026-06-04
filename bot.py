@@ -14,10 +14,10 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-SYSTEM_PROMPT = """Coach fitness esperto. Cerca schede online e crea programma personalizzato scientifico. Rispondi SOLO con JSON valido. Solo ASCII. Max 4 esercizi/giorno, max 5 giorni.
+SYSTEM_PROMPT = """You are an expert fitness coach. Search online for existing workout plans and create a personalized scientific program. Reply ONLY with valid JSON. ASCII characters only, no accents or special characters. Max 4 exercises per day, max 5 days.
 
-JSON:
-{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"Lunedi","focus":"Petto","esercizi":[{"nome":"Panca Piana","serie":4,"ripetizioni":"6-8","recupero":"2 min","note":"tecnica corretta","perche":"esercizio base petto"}]}]}"""
+JSON structure:
+{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"Monday","focus":"Chest","esercizi":[{"nome":"Bench Press","serie":4,"ripetizioni":"6-8","recupero":"2 min","note":"keep back on bench","perche":"primary compound for chest"}]}]}"""
 
 
 def pulisci_json(testo):
@@ -31,7 +31,7 @@ def pulisci_json(testo):
     testo = re.sub(r',\s*]', ']', testo)
     match = re.search(r'\{.*\}', testo, re.DOTALL)
     if not match:
-        raise ValueError("JSON non trovato")
+        raise ValueError("JSON not found")
     return json.loads(match.group())
 
 
@@ -189,7 +189,7 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{
                 "role": "user",
-                "content": "Crea scheda per "+user_name+". Info: "+user_message+". Cerca schede online. SOLO JSON valido, solo ASCII."
+                "content": "Create a workout plan for "+user_name+". User info: "+user_message+". Search online for existing workout plans. Reply ONLY with valid JSON, ASCII characters only, no special characters, no accents."
             }]
         )
 
@@ -207,7 +207,7 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 system=SYSTEM_PROMPT,
                 messages=[{
                     "role": "user",
-                    "content": "Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON. Max 3 esercizi, max 3 giorni."
+                    "content": "Create a simple workout plan for "+user_name+". Info: "+user_message+". ONLY valid JSON. Max 3 exercises, max 3 days. ASCII only."
                 }]
             )
             testo2 = ""
