@@ -14,24 +14,10 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-SYSTEM_PROMPT = """Sei un coach fitness esperto. Crea schede di allenamento personalizzate e scientifiche.
+SYSTEM_PROMPT = """Coach fitness esperto. Cerca schede online e crea programma personalizzato scientifico. Rispondi SOLO con JSON valido. Solo ASCII. Max 4 esercizi/giorno, max 5 giorni.
 
-Processo:
-1. Cerca su internet schede esistenti per gli obiettivi dell'utente
-2. Cerca video YouTube dimostrativi per ogni esercizio
-3. Crea un programma ottimale combinando le migliori fonti
-
-Per ogni scheda includi:
-- Esercizi compound + isolamento bilanciati
-- Progressione di carico settimana per settimana
-- Note tecniche dettagliate per ogni esercizio
-- Spiegazione scientifica del perche ogni esercizio e stato scelto
-- Link YouTube per ogni esercizio
-
-Rispondi SOLO con JSON valido. Solo caratteri ASCII. Max 4 esercizi/giorno, max 5 giorni.
-
-Struttura JSON:
-{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"descrizione approccio scientifico","note_generali":"consigli nutrizione e recupero","progressione":"piano dettagliato settimane 1-8","giorni":[{"giorno":"Lunedi","focus":"Petto e Tricipiti","esercizi":[{"nome":"Panca Piana","serie":4,"ripetizioni":"6-8","recupero":"2-3 min","note":"schiena appoggiata discesa controllata 3 secondi","perche":"esercizio compound primario per petto massima attivazione fibre","video_tutorial":"https://www.youtube.com/results?search_query=panca+piana+tecnica+corretta"}]}]}"""
+JSON:
+{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"Lunedi","focus":"Petto","esercizi":[{"nome":"Panca Piana","serie":4,"ripetizioni":"6-8","recupero":"2 min","note":"tecnica corretta","perche":"esercizio base petto"}]}]}"""
 
 
 def pulisci_json(testo):
@@ -57,22 +43,23 @@ def crea_excel(dati, nome_file):
     def ctr(wrap=False): return Alignment(horizontal="center",vertical="center",wrap_text=wrap)
     def lft(wrap=False): return Alignment(horizontal="left",vertical="center",wrap_text=wrap)
 
+    # FOGLIO 1
     ws1=wb.active; ws1.title="Scheda Settimanale"; ws1.sheet_view.showGridLines=False
-    ws1.merge_cells("A1:I1"); ws1.row_dimensions[1].height=50
+    ws1.merge_cells("A1:H1"); ws1.row_dimensions[1].height=50
     c=ws1["A1"]; c.value="FITCOACH PRO | Il tuo Personal Trainer AI"
     c.fill=fill(NERO); c.font=Font(bold=True,color=GIALLO,name="Calibri",size=16); c.alignment=ctr()
 
-    ws1.merge_cells("A2:I2"); ws1.row_dimensions[2].height=28
+    ws1.merge_cells("A2:H2"); ws1.row_dimensions[2].height=28
     c=ws1["A2"]
     c.value=str(dati.get("nome_utente",""))+" | "+str(dati.get("obiettivo",""))+" | "+str(dati.get("livello",""))+" | "+str(dati.get("giorni_settimana",""))+" giorni/sett"
     c.fill=fill(ROSSO); c.font=fnt(bold=True,size=11); c.alignment=ctr()
 
-    ws1.merge_cells("A3:I3"); ws1.row_dimensions[3].height=36
+    ws1.merge_cells("A3:H3"); ws1.row_dimensions[3].height=36
     c=ws1["A3"]; c.value="METODOLOGIA: "+str(dati.get("metodologia",""))
     c.fill=fill(GRIGIO_SC); c.font=fnt(size=10); c.alignment=lft(wrap=True)
 
-    headers=["GIORNO","FOCUS","ESERCIZIO","SERIE","REPS","RECUPERO","NOTE","PERCHE","VIDEO"]
-    widths=[13,18,26,7,10,10,34,34,36]
+    headers=["GIORNO","FOCUS","ESERCIZIO","SERIE","REPS","RECUPERO","NOTE TECNICHE","PERCHE"]
+    widths=[13,18,26,7,10,10,40,40]
     ws1.row_dimensions[4].height=30
     for col,(h,w) in enumerate(zip(headers,widths),1):
         ws1.column_dimensions[get_column_letter(col)].width=w
@@ -94,23 +81,23 @@ def crea_excel(dati, nome_file):
                 c=ws1.cell(row=prima,column=2,value=giorno.get("focus",""))
                 c.fill=fill(col_g); c.font=fnt(bold=True,size=10); c.alignment=ctr(wrap=True); c.border=brd()
             bg=GRIGIO_CH if i%2==0 else BIANCO
-            valori=[ex.get("nome",""),ex.get("serie",""),ex.get("ripetizioni",""),ex.get("recupero",""),ex.get("note",""),ex.get("perche",""),ex.get("video_tutorial","")]
+            valori=[ex.get("nome",""),ex.get("serie",""),ex.get("ripetizioni",""),ex.get("recupero",""),ex.get("note",""),ex.get("perche","")]
             for col_off,val in enumerate(valori):
                 c=ws1.cell(row=row,column=3+col_off,value=val)
                 c.fill=fill(bg); c.font=Font(color=GRIGIO_SC,name="Calibri",size=10,bold=(col_off==0))
                 c.alignment=ctr() if col_off<4 else lft(wrap=True); c.border=brd()
-                if col_off==6 and val and str(val).startswith("http"):
-                    c.hyperlink=val; c.font=Font(color="0563C1",name="Calibri",size=10,underline="single")
             row+=1
-        for col in range(1,10):
+        for col in range(1,9):
             c=ws1.cell(row=row,column=col,value=""); c.fill=fill(NERO)
         ws1.row_dimensions[row].height=5; row+=1
 
+    # FOGLIO 2
     ws2=wb.create_sheet("Spiegazioni"); ws2.sheet_view.showGridLines=False
-    ws2.merge_cells("A1:E1"); ws2.row_dimensions[1].height=50
+    ws2.merge_cells("A1:D1"); ws2.row_dimensions[1].height=50
     c=ws2["A1"]; c.value="FITCOACH PRO | Guida agli Esercizi"
     c.fill=fill(NERO); c.font=Font(bold=True,color=GIALLO,name="Calibri",size=15); c.alignment=ctr()
-    hdrs2=["ESERCIZIO","GIORNO","NOTE TECNICHE","PERCHE","VIDEO"]; widths2=[26,20,44,44,36]
+    hdrs2=["ESERCIZIO","GIORNO","NOTE TECNICHE","PERCHE QUESTO ESERCIZIO"]
+    widths2=[26,22,50,50]
     ws2.row_dimensions[2].height=30
     for col,(h,w) in enumerate(zip(hdrs2,widths2),1):
         ws2.column_dimensions[get_column_letter(col)].width=w
@@ -122,22 +109,27 @@ def crea_excel(dati, nome_file):
         for i,ex in enumerate(giorno.get("esercizi",[])):
             ws2.row_dimensions[r2].height=52
             bg=GRIGIO_CH if i%2==0 else BIANCO
-            vals=[ex.get("nome",""),str(giorno.get("giorno",""))+" - "+str(giorno.get("focus","")),ex.get("note",""),ex.get("perche",""),ex.get("video_tutorial","")]
+            vals=[ex.get("nome",""),str(giorno.get("giorno",""))+" - "+str(giorno.get("focus","")),ex.get("note",""),ex.get("perche","")]
             for col_idx,val in enumerate(vals,1):
                 c=ws2.cell(row=r2,column=col_idx,value=val)
                 c.fill=fill(col_g if col_idx==2 else bg)
                 c.font=Font(color=BIANCO if col_idx==2 else GRIGIO_SC,name="Calibri",size=10,bold=(col_idx==1))
                 c.alignment=ctr(wrap=True) if col_idx==2 else lft(wrap=True); c.border=brd()
-                if col_idx==5 and val and str(val).startswith("http"):
-                    c.hyperlink=val; c.font=Font(color="0563C1",name="Calibri",size=10,underline="single")
             r2+=1
 
+    # FOGLIO 3
     ws3=wb.create_sheet("Progressione"); ws3.sheet_view.showGridLines=False
     ws3.column_dimensions["A"].width=28; ws3.column_dimensions["B"].width=72
     ws3.merge_cells("A1:B1"); ws3.row_dimensions[1].height=50
     c=ws3["A1"]; c.value="FITCOACH PRO | Piano di Progressione"
     c.fill=fill(NERO); c.font=Font(bold=True,color=GIALLO,name="Calibri",size=16); c.alignment=ctr()
-    sezioni=[("Obiettivo",dati.get("obiettivo","")),("Livello",dati.get("livello","")),("Metodologia",dati.get("metodologia","")),("Progressione 1-8 sett",dati.get("progressione","")),("Nutrizione e Recupero",dati.get("note_generali",""))]
+    sezioni=[
+        ("Obiettivo",dati.get("obiettivo","")),
+        ("Livello",dati.get("livello","")),
+        ("Metodologia",dati.get("metodologia","")),
+        ("Progressione 1-8 sett",dati.get("progressione","")),
+        ("Nutrizione e Recupero",dati.get("note_generali",""))
+    ]
     r3=2
     for titolo,valore in sezioni:
         ws3.row_dimensions[r3].height=max(32,min(120,len(str(valore))//2))
@@ -150,7 +142,7 @@ def crea_excel(dati, nome_file):
     footer="Creato da FitCoach Pro | Il tuo Personal Trainer AI su Telegram"
     for ws in [ws1,ws2,ws3]:
         last=ws.max_row+2
-        ws.merge_cells("A"+str(last)+":I"+str(last))
+        ws.merge_cells("A"+str(last)+":H"+str(last))
         c=ws.cell(row=last,column=1,value=footer)
         c.fill=fill(NERO); c.font=Font(color=GIALLO,name="Calibri",size=9,italic=True); c.alignment=ctr()
 
@@ -171,6 +163,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Riceverai un file Excel con la tua scheda completa!"
     )
 
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Descrivimi la tua situazione!\n\n"
@@ -178,42 +171,47 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Riceverai un Excel con la tua scheda!"
     )
 
+
 async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     user_name = update.message.from_user.first_name
-    attesa = await update.message.reply_text("Sto cercando le migliori schede e creando il tuo programma... circa 40 secondi!")
+    attesa = await update.message.reply_text(
+        "Sto cercando le migliori schede e creando il tuo programma... circa 40 secondi!"
+    )
 
     try:
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=3000,
+            max_tokens=2000,
             system=SYSTEM_PROMPT,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{
                 "role": "user",
-                "content": "Crea scheda completa per "+user_name+". Info: "+user_message+". Cerca schede esistenti e video YouTube per ogni esercizio. SOLO JSON valido, solo ASCII."
+                "content": "Crea scheda per "+user_name+". Info: "+user_message+". Cerca schede online. SOLO JSON valido, solo ASCII."
             }]
         )
 
         testo = ""
         for b in response.content:
-            if hasattr(b, "text"): testo += b.text
+            if hasattr(b, "text"):
+                testo += b.text
 
         try:
             dati = pulisci_json(testo)
         except Exception:
             response2 = client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=2000,
+                max_tokens=1500,
                 system=SYSTEM_PROMPT,
                 messages=[{
                     "role": "user",
-                    "content": "Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON valido, solo ASCII. Max 3 esercizi, max 3 giorni."
+                    "content": "Crea scheda per "+user_name+". Info: "+user_message+". SOLO JSON. Max 3 esercizi, max 3 giorni."
                 }]
             )
             testo2 = ""
             for b in response2.content:
-                if hasattr(b, "text"): testo2 += b.text
+                if hasattr(b, "text"):
+                    testo2 += b.text
             dati = pulisci_json(testo2)
 
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
@@ -225,14 +223,23 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_document(
                 document=f,
                 filename="FitCoachPro_"+user_name+".xlsx",
-                caption="Scheda pronta "+user_name+"!\n\n3 fogli:\n- Scheda Settimanale\n- Spiegazioni\n- Progressione\n\nClicca sui link per i video tutorial!"
+                caption=(
+                    "Scheda pronta "+user_name+"!\n\n"
+                    "3 fogli:\n"
+                    "- Scheda Settimanale\n"
+                    "- Spiegazioni\n"
+                    "- Progressione"
+                )
             )
         os.unlink(nome_file)
 
     except Exception as e:
         await attesa.delete()
-        await update.message.reply_text("Si e verificato un errore. Riprova o scrivi /start")
+        await update.message.reply_text(
+            "Si e verificato un errore. Riprova o scrivi /start"
+        )
         print("Errore: "+str(e))
+
 
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -241,6 +248,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crea_scheda))
     print("Bot avviato!")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
