@@ -24,6 +24,11 @@ def pulisci_json(testo):
     testo = testo.replace("```json","").replace("```","").strip()
     testo = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', testo)
     testo = testo.replace('\u2019',"'").replace('\u201c','"').replace('\u201d','"')
+    testo = testo.replace('\u00e0','a').replace('\u00e8','e').replace('\u00e9','e')
+    testo = testo.replace('\u00ec','i').replace('\u00f2','o').replace('\u00f9','u')
+    testo = testo.replace('\u00c0','A').replace('\u00c8','E').replace('\u00c9','E')
+    testo = re.sub(r',\s*}', '}', testo)
+    testo = re.sub(r',\s*]', ']', testo)
     match = re.search(r'\{.*\}', testo, re.DOTALL)
     if not match:
         raise ValueError("JSON non trovato")
@@ -43,7 +48,6 @@ def crea_excel(dati, nome_file):
     def ctr(wrap=False): return Alignment(horizontal="center",vertical="center",wrap_text=wrap)
     def lft(wrap=False): return Alignment(horizontal="left",vertical="center",wrap_text=wrap)
 
-    # FOGLIO 1
     ws1=wb.active; ws1.title="Scheda Settimanale"; ws1.sheet_view.showGridLines=False
     ws1.merge_cells("A1:H1"); ws1.row_dimensions[1].height=50
     c=ws1["A1"]; c.value="FITCOACH PRO | Il tuo Personal Trainer AI"
@@ -91,7 +95,6 @@ def crea_excel(dati, nome_file):
             c=ws1.cell(row=row,column=col,value=""); c.fill=fill(NERO)
         ws1.row_dimensions[row].height=5; row+=1
 
-    # FOGLIO 2
     ws2=wb.create_sheet("Spiegazioni"); ws2.sheet_view.showGridLines=False
     ws2.merge_cells("A1:D1"); ws2.row_dimensions[1].height=50
     c=ws2["A1"]; c.value="FITCOACH PRO | Guida agli Esercizi"
@@ -117,7 +120,6 @@ def crea_excel(dati, nome_file):
                 c.alignment=ctr(wrap=True) if col_idx==2 else lft(wrap=True); c.border=brd()
             r2+=1
 
-    # FOGLIO 3
     ws3=wb.create_sheet("Progressione"); ws3.sheet_view.showGridLines=False
     ws3.column_dimensions["A"].width=28; ws3.column_dimensions["B"].width=72
     ws3.merge_cells("A1:B1"); ws3.row_dimensions[1].height=50
