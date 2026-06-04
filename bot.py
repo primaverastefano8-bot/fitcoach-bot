@@ -14,35 +14,24 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-SYSTEM_PROMPT = """You are an expert fitness coach with deep knowledge of exercise science. When creating workout plans follow these rules:
+SEARCH_PROMPT = """You are a fitness research assistant. Search online for scientific workout programs and evidence-based exercises. Find the best exercises for the user's goals. Return a brief summary in plain text of what you found."""
 
-1. Search online for scientific workout programs and evidence-based exercises
-2. Search for exercises scientifically proven to maximize muscle activation and growth
-3. ALWAYS follow EXACTLY what the user asks: exact number of training days, specific muscle groups, fitness level, injuries or limitations
-4. Choose the best compound and isolation exercises based on scientific research
-5. Include progressive overload principles
+JSON_PROMPT = """You are an expert fitness coach. Based on the research provided, create a personalized workout plan. Reply ONLY with a valid JSON object. Rules:
+- Use ONLY ASCII characters (a-z, A-Z, 0-9, spaces, basic punctuation)
+- NO accents, NO special characters, NO unicode
+- Keep each text field under 10 words
+- Follow EXACTLY what the user requested: days, muscle groups, level, injuries
+- No text before or after the JSON
 
-Reply ONLY with a valid JSON object. No text before or after. Use ONLY ASCII characters. No accents. No special characters. Keep text values under 15 words each.
-
-Use EXACTLY this JSON structure:
-{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"Monday","focus":"Chest Triceps","esercizi":[{"nome":"Bench Press","serie":4,"ripetizioni":"6-8","recupero":"2min","note":"keep back on bench control descent","perche":"primary chest compound max fiber activation"}]}]}"""
+JSON structure:
+{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"Monday","focus":"Chest","esercizi":[{"nome":"Bench Press","serie":4,"ripetizioni":"6-8","recupero":"2min","note":"control descent arch back","perche":"best chest compound"}]}]}"""
 
 
 def pulisci_json(testo):
     testo = testo.replace("```json","").replace("```","").strip()
-    testo = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', testo)
-    for old,new in [
-        ('\u2019',"'"),('\u201c','"'),('\u201d','"'),
-        ('\u00e0','a'),('\u00e8','e'),('\u00e9','e'),
-        ('\u00ec','i'),('\u00f2','o'),('\u00f9','u'),
-        ('\u00c0','A'),('\u00c8','E'),('\u00c9','E'),
-        ('\u2013','-'),('\u2014','-'),('\u00fb','u'),
-        ('\u00ee','i'),('\u00e2','a'),('\u00ea','e')
-    ]:
-        testo = testo.replace(old,new)
+    testo = re.sub(r'[\x00-\x1f\x7f-\xff]', lambda m: '' if ord(m.group()) > 127 else m.group(), testo)
     testo = re.sub(r',\s*}', '}', testo)
     testo = re.sub(r',\s*]', ']', testo)
-    testo = re.sub(r'[\x80-\xff]', '', testo)
     match = re.search(r'\{.*\}', testo, re.DOTALL)
     if not match:
         raise ValueError("JSON not found")
@@ -66,7 +55,6 @@ def crea_excel(dati, nome_file):
     def lft(wrap=False):
         return Alignment(horizontal="left",vertical="center",wrap_text=wrap)
 
-    # FOGLIO 1 - SCHEDA SETTIMANALE
     ws1=wb.active; ws1.title="Scheda Settimanale"
     ws1.sheet_view.showGridLines=False
 
@@ -133,7 +121,6 @@ def crea_excel(dati, nome_file):
             c.fill=fill(NERO)
         ws1.row_dimensions[row].height=5; row+=1
 
-    # FOGLIO 2 - SPIEGAZIONI
     ws2=wb.create_sheet("Spiegazioni")
     ws2.sheet_view.showGridLines=False
 
@@ -175,7 +162,6 @@ def crea_excel(dati, nome_file):
                 c.border=brd()
             r2+=1
 
-    # FOGLIO 3 - PROGRESSIONE
     ws3=wb.create_sheet("Progressione")
     ws3.sheet_view.showGridLines=False
     ws3.column_dimensions["A"].width=28
@@ -251,52 +237,45 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        response = client.messages.create(
+        # PASSO 1: ricerca web
+        search_response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=2000,
-            system=SYSTEM_PROMPT,
+            max_tokens=1000,
+            system=SEARCH_PROMPT,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{
                 "role": "user",
+                "content": "Search for the best scientific exercises and workout programs for: "+user_message
+            }]
+        )
+
+        ricerca = ""
+        for b in search_response.content:
+            if hasattr(b, "text"):
+                ricerca += b.text
+
+        # PASSO 2: genera JSON pulito senza web search
+        json_response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
+            system=JSON_PROMPT,
+            messages=[{
+                "role": "user",
                 "content": (
-                    "Create a workout plan for "+user_name+". "
-                    "IMPORTANT: follow EXACTLY what the user asks. "
-                    "User request: "+user_message+". "
-                    "Respect: exact number of training days, muscle groups, "
-                    "fitness level, injuries. "
-                    "Search online for scientific workout plans. "
-                    "Reply ONLY with valid JSON. ASCII only. Max 15 words per field."
+                    "User name: "+user_name+"\n"
+                    "User request: "+user_message+"\n"
+                    "Research findings: "+ricerca[:500]+"\n\n"
+                    "Now create the workout plan JSON. Follow EXACTLY the user request. ASCII only."
                 )
             }]
         )
 
         testo = ""
-        for b in response.content:
+        for b in json_response.content:
             if hasattr(b, "text"):
                 testo += b.text
 
-        try:
-            dati = pulisci_json(testo)
-        except Exception as e1:
-            print("Primo tentativo fallito: "+str(e1))
-            response2 = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=1000,
-                system=SYSTEM_PROMPT,
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        "Create workout plan for "+user_name+". "
-                        "Request: "+user_message+". "
-                        "ONLY valid JSON. ASCII only. Max 8 words per field."
-                    )
-                }]
-            )
-            testo2 = ""
-            for b in response2.content:
-                if hasattr(b, "text"):
-                    testo2 += b.text
-            dati = pulisci_json(testo2)
+        dati = pulisci_json(testo)
 
         with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
             nome_file = tmp.name
