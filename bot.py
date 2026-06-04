@@ -14,52 +14,80 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-SYSTEM_PROMPT = """You are an expert fitness coach. Search online for workout plans and create a personalized program. Reply ONLY with a valid JSON object. Use ONLY ASCII characters. No accents. No special chars. Keep all text values SHORT (max 10 words each).
+SYSTEM_PROMPT = """You are an expert fitness coach with deep knowledge of exercise science. When creating workout plans follow these rules:
 
-Example of the EXACT format required:
-{"nome_utente":"John","obiettivo":"muscle gain","livello":"intermediate","giorni_settimana":4,"metodologia":"progressive overload hypertrophy","note_generali":"eat high protein sleep 8h","progressione":"add weight each week","giorni":[{"giorno":"Monday","focus":"Chest Triceps","esercizi":[{"nome":"Bench Press","serie":4,"ripetizioni":"6-8","recupero":"2min","note":"arch back control descent","perche":"primary chest compound"}]}]}"""
+1. Search online for scientific workout programs and evidence-based exercises
+2. Search for exercises scientifically proven to maximize muscle activation and growth
+3. ALWAYS follow EXACTLY what the user asks: exact number of training days, specific muscle groups, fitness level, injuries or limitations
+4. Choose the best compound and isolation exercises based on scientific research
+5. Include progressive overload principles
+
+Reply ONLY with a valid JSON object. No text before or after. Use ONLY ASCII characters. No accents. No special characters. Keep text values under 15 words each.
+
+Use EXACTLY this JSON structure:
+{"nome_utente":"","obiettivo":"","livello":"","giorni_settimana":4,"metodologia":"","note_generali":"","progressione":"","giorni":[{"giorno":"Monday","focus":"Chest Triceps","esercizi":[{"nome":"Bench Press","serie":4,"ripetizioni":"6-8","recupero":"2min","note":"keep back on bench control descent","perche":"primary chest compound max fiber activation"}]}]}"""
 
 
 def pulisci_json(testo):
     testo = testo.replace("```json","").replace("```","").strip()
     testo = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', testo)
-    for old,new in [('\u2019',"'"),('\u201c','"'),('\u201d','"'),('\u00e0','a'),('\u00e8','e'),('\u00e9','e'),('\u00ec','i'),('\u00f2','o'),('\u00f9','u'),('\u00c0','A'),('\u00c8','E'),('\u00c9','E'),('\u2013','-'),('\u2014','-')]:
+    for old,new in [
+        ('\u2019',"'"),('\u201c','"'),('\u201d','"'),
+        ('\u00e0','a'),('\u00e8','e'),('\u00e9','e'),
+        ('\u00ec','i'),('\u00f2','o'),('\u00f9','u'),
+        ('\u00c0','A'),('\u00c8','E'),('\u00c9','E'),
+        ('\u2013','-'),('\u2014','-'),('\u00fb','u'),
+        ('\u00ee','i'),('\u00e2','a'),('\u00ea','e')
+    ]:
         testo = testo.replace(old,new)
     testo = re.sub(r',\s*}', '}', testo)
     testo = re.sub(r',\s*]', ']', testo)
+    testo = re.sub(r'[\x80-\xff]', '', testo)
     match = re.search(r'\{.*\}', testo, re.DOTALL)
     if not match:
         raise ValueError("JSON not found")
-    raw = match.group()
-    raw = re.sub(r'[\x80-\xff]', '', raw)
-    return json.loads(raw)
+    return json.loads(match.group())
 
 
 def crea_excel(dati, nome_file):
     wb = Workbook()
-    NERO="1A1A2E"; ROSSO="E63946"; GRIGIO_SC="2D2D2D"; GRIGIO_CH="F5F5F5"; BIANCO="FFFFFF"; GIALLO="FFD700"
+    NERO="1A1A2E"; ROSSO="E63946"; GRIGIO_SC="2D2D2D"
+    GRIGIO_CH="F5F5F5"; BIANCO="FFFFFF"; GIALLO="FFD700"
     COLORI_GIORNI=["16213E","0F3460","533483","2C2C54","1B4332","3D0C02"]
 
     def fill(h): return PatternFill("solid",fgColor=h)
-    def fnt(bold=False,color=BIANCO,size=11): return Font(bold=bold,color=color,name="Calibri",size=size)
+    def fnt(bold=False,color=BIANCO,size=11):
+        return Font(bold=bold,color=color,name="Calibri",size=size)
     def brd():
         s=Side(style="thin",color="CCCCCC")
         return Border(left=s,right=s,top=s,bottom=s)
-    def ctr(wrap=False): return Alignment(horizontal="center",vertical="center",wrap_text=wrap)
-    def lft(wrap=False): return Alignment(horizontal="left",vertical="center",wrap_text=wrap)
+    def ctr(wrap=False):
+        return Alignment(horizontal="center",vertical="center",wrap_text=wrap)
+    def lft(wrap=False):
+        return Alignment(horizontal="left",vertical="center",wrap_text=wrap)
 
-    ws1=wb.active; ws1.title="Scheda Settimanale"; ws1.sheet_view.showGridLines=False
+    # FOGLIO 1 - SCHEDA SETTIMANALE
+    ws1=wb.active; ws1.title="Scheda Settimanale"
+    ws1.sheet_view.showGridLines=False
+
     ws1.merge_cells("A1:H1"); ws1.row_dimensions[1].height=50
-    c=ws1["A1"]; c.value="FITCOACH PRO | Il tuo Personal Trainer AI"
-    c.fill=fill(NERO); c.font=Font(bold=True,color=GIALLO,name="Calibri",size=16); c.alignment=ctr()
+    c=ws1["A1"]
+    c.value="FITCOACH PRO | Il tuo Personal Trainer AI"
+    c.fill=fill(NERO)
+    c.font=Font(bold=True,color=GIALLO,name="Calibri",size=16)
+    c.alignment=ctr()
 
     ws1.merge_cells("A2:H2"); ws1.row_dimensions[2].height=28
     c=ws1["A2"]
-    c.value=str(dati.get("nome_utente",""))+" | "+str(dati.get("obiettivo",""))+" | "+str(dati.get("livello",""))+" | "+str(dati.get("giorni_settimana",""))+" giorni/sett"
+    c.value=(str(dati.get("nome_utente",""))+" | "+
+             str(dati.get("obiettivo",""))+" | "+
+             str(dati.get("livello",""))+" | "+
+             str(dati.get("giorni_settimana",""))+" giorni/sett")
     c.fill=fill(ROSSO); c.font=fnt(bold=True,size=11); c.alignment=ctr()
 
     ws1.merge_cells("A3:H3"); ws1.row_dimensions[3].height=36
-    c=ws1["A3"]; c.value="METODOLOGIA: "+str(dati.get("metodologia",""))
+    c=ws1["A3"]
+    c.value="METODOLOGIA: "+str(dati.get("metodologia",""))
     c.fill=fill(GRIGIO_SC); c.font=fnt(size=10); c.alignment=lft(wrap=True)
 
     headers=["GIORNO","FOCUS","ESERCIZIO","SERIE","REPS","RECUPERO","NOTE TECNICHE","PERCHE"]
@@ -68,7 +96,8 @@ def crea_excel(dati, nome_file):
     for col,(h,w) in enumerate(zip(headers,widths),1):
         ws1.column_dimensions[get_column_letter(col)].width=w
         c=ws1.cell(row=4,column=col,value=h)
-        c.fill=fill(GRIGIO_SC); c.font=fnt(bold=True,size=10); c.alignment=ctr(); c.border=brd()
+        c.fill=fill(GRIGIO_SC); c.font=fnt(bold=True,size=10)
+        c.alignment=ctr(); c.border=brd()
 
     row=5
     for idx,giorno in enumerate(dati.get("giorni",[])):
@@ -81,50 +110,84 @@ def crea_excel(dati, nome_file):
                     ws1.merge_cells("A"+str(prima)+":A"+str(prima+len(esercizi)-1))
                     ws1.merge_cells("B"+str(prima)+":B"+str(prima+len(esercizi)-1))
                 c=ws1.cell(row=prima,column=1,value=giorno.get("giorno",""))
-                c.fill=fill(col_g); c.font=fnt(bold=True,size=10); c.alignment=ctr(wrap=True); c.border=brd()
+                c.fill=fill(col_g); c.font=fnt(bold=True,size=10)
+                c.alignment=ctr(wrap=True); c.border=brd()
                 c=ws1.cell(row=prima,column=2,value=giorno.get("focus",""))
-                c.fill=fill(col_g); c.font=fnt(bold=True,size=10); c.alignment=ctr(wrap=True); c.border=brd()
+                c.fill=fill(col_g); c.font=fnt(bold=True,size=10)
+                c.alignment=ctr(wrap=True); c.border=brd()
             bg=GRIGIO_CH if i%2==0 else BIANCO
-            valori=[ex.get("nome",""),ex.get("serie",""),ex.get("ripetizioni",""),ex.get("recupero",""),ex.get("note",""),ex.get("perche","")]
+            valori=[
+                ex.get("nome",""),ex.get("serie",""),
+                ex.get("ripetizioni",""),ex.get("recupero",""),
+                ex.get("note",""),ex.get("perche","")
+            ]
             for col_off,val in enumerate(valori):
                 c=ws1.cell(row=row,column=3+col_off,value=val)
-                c.fill=fill(bg); c.font=Font(color=GRIGIO_SC,name="Calibri",size=10,bold=(col_off==0))
-                c.alignment=ctr() if col_off<4 else lft(wrap=True); c.border=brd()
+                c.fill=fill(bg)
+                c.font=Font(color=GRIGIO_SC,name="Calibri",size=10,bold=(col_off==0))
+                c.alignment=ctr() if col_off<4 else lft(wrap=True)
+                c.border=brd()
             row+=1
         for col in range(1,9):
-            c=ws1.cell(row=row,column=col,value=""); c.fill=fill(NERO)
+            c=ws1.cell(row=row,column=col,value="")
+            c.fill=fill(NERO)
         ws1.row_dimensions[row].height=5; row+=1
 
-    ws2=wb.create_sheet("Spiegazioni"); ws2.sheet_view.showGridLines=False
+    # FOGLIO 2 - SPIEGAZIONI
+    ws2=wb.create_sheet("Spiegazioni")
+    ws2.sheet_view.showGridLines=False
+
     ws2.merge_cells("A1:D1"); ws2.row_dimensions[1].height=50
-    c=ws2["A1"]; c.value="FITCOACH PRO | Guida agli Esercizi"
-    c.fill=fill(NERO); c.font=Font(bold=True,color=GIALLO,name="Calibri",size=15); c.alignment=ctr()
+    c=ws2["A1"]
+    c.value="FITCOACH PRO | Guida agli Esercizi"
+    c.fill=fill(NERO)
+    c.font=Font(bold=True,color=GIALLO,name="Calibri",size=15)
+    c.alignment=ctr()
+
     hdrs2=["ESERCIZIO","GIORNO","NOTE TECNICHE","PERCHE QUESTO ESERCIZIO"]
     widths2=[26,22,50,50]
     ws2.row_dimensions[2].height=30
     for col,(h,w) in enumerate(zip(hdrs2,widths2),1):
         ws2.column_dimensions[get_column_letter(col)].width=w
         c=ws2.cell(row=2,column=col,value=h)
-        c.fill=fill(GRIGIO_SC); c.font=fnt(bold=True,size=10); c.alignment=ctr(); c.border=brd()
+        c.fill=fill(GRIGIO_SC); c.font=fnt(bold=True,size=10)
+        c.alignment=ctr(); c.border=brd()
+
     r2=3
     for idx,giorno in enumerate(dati.get("giorni",[])):
         col_g=COLORI_GIORNI[idx%len(COLORI_GIORNI)]
         for i,ex in enumerate(giorno.get("esercizi",[])):
             ws2.row_dimensions[r2].height=52
             bg=GRIGIO_CH if i%2==0 else BIANCO
-            vals=[ex.get("nome",""),str(giorno.get("giorno",""))+" - "+str(giorno.get("focus","")),ex.get("note",""),ex.get("perche","")]
+            vals=[
+                ex.get("nome",""),
+                str(giorno.get("giorno",""))+" - "+str(giorno.get("focus","")),
+                ex.get("note",""),
+                ex.get("perche","")
+            ]
             for col_idx,val in enumerate(vals,1):
                 c=ws2.cell(row=r2,column=col_idx,value=val)
                 c.fill=fill(col_g if col_idx==2 else bg)
-                c.font=Font(color=BIANCO if col_idx==2 else GRIGIO_SC,name="Calibri",size=10,bold=(col_idx==1))
-                c.alignment=ctr(wrap=True) if col_idx==2 else lft(wrap=True); c.border=brd()
+                c.font=Font(
+                    color=BIANCO if col_idx==2 else GRIGIO_SC,
+                    name="Calibri",size=10,bold=(col_idx==1))
+                c.alignment=ctr(wrap=True) if col_idx==2 else lft(wrap=True)
+                c.border=brd()
             r2+=1
 
-    ws3=wb.create_sheet("Progressione"); ws3.sheet_view.showGridLines=False
-    ws3.column_dimensions["A"].width=28; ws3.column_dimensions["B"].width=72
+    # FOGLIO 3 - PROGRESSIONE
+    ws3=wb.create_sheet("Progressione")
+    ws3.sheet_view.showGridLines=False
+    ws3.column_dimensions["A"].width=28
+    ws3.column_dimensions["B"].width=72
+
     ws3.merge_cells("A1:B1"); ws3.row_dimensions[1].height=50
-    c=ws3["A1"]; c.value="FITCOACH PRO | Piano di Progressione"
-    c.fill=fill(NERO); c.font=Font(bold=True,color=GIALLO,name="Calibri",size=16); c.alignment=ctr()
+    c=ws3["A1"]
+    c.value="FITCOACH PRO | Piano di Progressione"
+    c.fill=fill(NERO)
+    c.font=Font(bold=True,color=GIALLO,name="Calibri",size=16)
+    c.alignment=ctr()
+
     sezioni=[
         ("Obiettivo",dati.get("obiettivo","")),
         ("Livello",dati.get("livello","")),
@@ -136,9 +199,12 @@ def crea_excel(dati, nome_file):
     for titolo,valore in sezioni:
         ws3.row_dimensions[r3].height=max(32,min(120,len(str(valore))//2))
         c=ws3.cell(row=r3,column=1,value=titolo)
-        c.fill=fill(ROSSO); c.font=fnt(bold=True,size=11); c.alignment=lft(); c.border=brd()
+        c.fill=fill(ROSSO); c.font=fnt(bold=True,size=11)
+        c.alignment=lft(); c.border=brd()
         c=ws3.cell(row=r3,column=2,value=valore)
-        c.fill=fill(GRIGIO_CH); c.font=Font(color=GRIGIO_SC,name="Calibri",size=10); c.alignment=lft(wrap=True); c.border=brd()
+        c.fill=fill(GRIGIO_CH)
+        c.font=Font(color=GRIGIO_SC,name="Calibri",size=10)
+        c.alignment=lft(wrap=True); c.border=brd()
         r3+=1
 
     footer="Creato da FitCoach Pro | Il tuo Personal Trainer AI su Telegram"
@@ -146,7 +212,9 @@ def crea_excel(dati, nome_file):
         last=ws.max_row+2
         ws.merge_cells("A"+str(last)+":H"+str(last))
         c=ws.cell(row=last,column=1,value=footer)
-        c.fill=fill(NERO); c.font=Font(color=GIALLO,name="Calibri",size=9,italic=True); c.alignment=ctr()
+        c.fill=fill(NERO)
+        c.font=Font(color=GIALLO,name="Calibri",size=9,italic=True)
+        c.alignment=ctr()
 
     wb.save(nome_file)
     return nome_file
@@ -169,7 +237,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Descrivimi la tua situazione!\n\n"
-        "Esempio: Ho i tricipiti carenti, mi alleno 4 giorni, livello intermedio, voglio massa.\n\n"
+        "Esempio: Ho i tricipiti carenti, mi alleno 4 giorni, "
+        "livello intermedio, voglio massa.\n\n"
         "Riceverai un Excel con la tua scheda!"
     )
 
@@ -189,7 +258,15 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{
                 "role": "user",
-                "content": "Create workout plan for "+user_name+". Info: "+user_message+". Search online for workout plans. Reply ONLY with valid JSON. ASCII only. Max 10 words per text field. Max 4 exercises per day."
+                "content": (
+                    "Create a workout plan for "+user_name+". "
+                    "IMPORTANT: follow EXACTLY what the user asks. "
+                    "User request: "+user_message+". "
+                    "Respect: exact number of training days, muscle groups, "
+                    "fitness level, injuries. "
+                    "Search online for scientific workout plans. "
+                    "Reply ONLY with valid JSON. ASCII only. Max 15 words per field."
+                )
             }]
         )
 
@@ -208,7 +285,11 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 system=SYSTEM_PROMPT,
                 messages=[{
                     "role": "user",
-                    "content": "Create workout plan for "+user_name+". Info: "+user_message+". ONLY JSON. Max 3 exercises, max 3 days. ASCII only. Max 8 words per field."
+                    "content": (
+                        "Create workout plan for "+user_name+". "
+                        "Request: "+user_message+". "
+                        "ONLY valid JSON. ASCII only. Max 8 words per field."
+                    )
                 }]
             )
             testo2 = ""
