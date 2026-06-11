@@ -8,50 +8,90 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-SYSTEM_PROMPT = """Sei un coach fitness esperto e personale trainer certificato con 15 anni di esperienza.
-Il tuo compito è creare schede di allenamento personalizzate basandoti sulle informazioni dell'utente.
+SYSTEM_PROMPT = """Sei un coach fitness esperto e personal trainer certificato con 15 anni di esperienza.
+Crea schede di allenamento personalizzate SEMPRE in questo formato esatto:
 
-Quando crei una scheda:
-1. Analizza attentamente i punti deboli e gli obiettivi dell'utente
-2. Crea un programma settimanale dettagliato rispettando ESATTAMENTE il numero di giorni richiesto
-3. Per ogni esercizio specifica: serie, ripetizioni, recupero, note tecniche
-4. Includi progressione nel tempo (settimane 1-4, 5-8, ecc.)
-5. Aggiungi consigli su nutrizione base e recupero
-6. Spiega il PERCHE di ogni scelta
+---
+# SCHEDA DI ALLENAMENTO PERSONALIZZATA — [NOME UTENTE]
+### Livello: [livello] | Focus: [obiettivo principale] | Giorni: [N]/settimana
 
-Formato la scheda in modo chiaro con:
-- Obiettivo principale
-- Struttura settimanale
-- Esercizi dettagliati per ogni giorno
-- Progressione consigliata
-- Consigli nutrizionali base
-- Note di sicurezza importanti
+---
+### [EMOJI COLORE] GIORNO A — [GIORNO SETTIMANA] | [Gruppi muscolari]
 
-Basa le tue raccomandazioni sui principi scientifici dell'allenamento."""
+> **Perche?** [Spiegazione scientifica del perche questi muscoli e questo approccio]
+
+| # | Esercizio | Serie | Rip. | Recupero | Note Tecniche |
+|---|-----------|-------|------|----------|---------------|
+| 1 | **[Nome Esercizio]** | [N] | [N-N] | [N'N"] | [note tecniche dettagliate] |
+| 2 | **[Nome Esercizio]** | [N] | [N-N] | [N'N"] | [note tecniche dettagliate] |
+...
+
+> Note aggiuntive scientifiche se necessario
+
+---
+[RIPETI PER OGNI GIORNO DI ALLENAMENTO]
+
+---
+## PROGRESSIONE NEL TEMPO
+
+### SETTIMANE 1-4 | Fase di Accumulo
+- Obiettivo e dettagli
+- RIR consigliato
+- Incrementi settimanali
+
+### SETTIMANE 5-8 | Fase di Intensificazione
+- Obiettivo e dettagli
+- RIR consigliato
+- Tecniche avanzate
+
+### SETTIMANE 9-10 | Deload
+- Come ridurre il volume
+- Come recuperare
+
+---
+## NOTE DI SICUREZZA IMPORTANTI
+1. [nota 1]
+2. [nota 2]
+3. [nota 3]
+4. [nota 4]
+5. [nota 5]
+
+---
+## OBIETTIVO PRINCIPALE
+[Descrizione dettagliata con spiegazione scientifica]
+
+---
+
+REGOLE IMPORTANTI:
+1. Rispetta ESATTAMENTE il numero di giorni richiesto dall utente
+2. Rispetta tutti i vincoli (infortuni, esercizi da evitare, attrezzatura)
+3. Spiega sempre il PERCHE scientifico di ogni scelta
+4. Usa le emoji per rendere visivamente chiara la struttura
+5. Le tabelle devono essere sempre complete con tutte le colonne
+6. Cerca sempre le migliori schede scientifiche online come riferimento"""
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    messaggio = (
+    await update.message.reply_text(
         "Benvenuto in FitCoach Pro!\n\n"
-        "Sono il tuo personal trainer AI. Posso creare schede di allenamento "
-        "completamente personalizzate per te.\n\n"
-        "Per creare la tua scheda, dimmi:\n\n"
-        "- I tuoi obiettivi (es. massa, forza, dimagrimento)\n"
-        "- I tuoi punti deboli (es. tricipiti scarsi, poca forza nel petto)\n"
+        "Sono il tuo personal trainer AI.\n\n"
+        "Per creare la tua scheda dimmi:\n\n"
+        "- I tuoi obiettivi (massa, forza, dimagrimento)\n"
+        "- I tuoi punti deboli (es. tricipiti scarsi)\n"
         "- Quanti giorni a settimana ti alleni\n"
         "- La tua esperienza (principiante/intermedio/avanzato)\n"
-        "- Eventuali infortuni o limitazioni\n\n"
-        "Scrivi tutto in un messaggio e creo la tua scheda personalizzata!"
+        "- Eventuali infortuni o limitazioni\n"
+        "- Attrezzatura disponibile\n\n"
+        "Scrivi tutto in un messaggio e creo la tua scheda!"
     )
-    await update.message.reply_text(messaggio)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Come usarmi:\n\n"
-        "Semplicemente descrivimi la tua situazione in un messaggio!\n\n"
+        "Descrivimi la tua situazione in un messaggio!\n\n"
         "Esempio:\n"
-        "Ho i tricipiti molto carenti e voglio migliorarli. Mi alleno 4 giorni a settimana, "
-        "livello intermedio, nessun infortunio. Voglio anche aumentare la forza dei pettorali.\n\n"
-        "E io creo la tua scheda!"
+        "Ho i tricipiti molto carenti. Mi alleno 4 giorni a settimana, "
+        "livello intermedio, nessun infortunio. Voglio aumentare la forza del petto.\n\n"
+        "Creo la tua scheda personalizzata!"
     )
 
 async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -59,8 +99,8 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.message.from_user.first_name
 
     attesa = await update.message.reply_text(
-        "Sto analizzando la tua situazione e creando la scheda personalizzata...\n"
-        "Ci vogliono circa 30 secondi!"
+        "Sto analizzando la tua situazione e cercando le migliori schede...\n"
+        "Circa 30-40 secondi!"
     )
 
     try:
@@ -72,11 +112,13 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
             messages=[{
                 "role": "user",
                 "content": (
-                    "Crea una scheda di allenamento personalizzata per " + user_name + ". "
-                    "Ecco le sue informazioni: " + user_message + "\n\n"
-                    "Prima cerca su internet esempi di schede per questi obiettivi specifici, "
-                    "poi crea un programma personalizzato e ottimizzato. "
-                    "Rispetta ESATTAMENTE il numero di giorni di allenamento richiesto dall utente."
+                    "Crea una scheda di allenamento personalizzata per " + user_name + ".\n"
+                    "Informazioni: " + user_message + "\n\n"
+                    "IMPORTANTE:\n"
+                    "1. Rispetta ESATTAMENTE il numero di giorni richiesto\n"
+                    "2. Usa il formato con tabelle e sezioni come da istruzioni\n"
+                    "3. Cerca online schede scientifiche come riferimento\n"
+                    "4. Spiega il perche scientifico di ogni scelta"
                 )
             }]
         )
@@ -92,11 +134,17 @@ async def crea_scheda(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parti = [scheda_testo[i:i+4000] for i in range(0, len(scheda_testo), 4000)]
             for i, parte in enumerate(parti):
                 if i == 0:
-                    await update.message.reply_text("LA TUA SCHEDA PERSONALIZZATA\n\n" + parte)
+                    await update.message.reply_text(
+                        "LA TUA SCHEDA PERSONALIZZATA\n\n" + parte,
+                        parse_mode="Markdown"
+                    )
                 else:
-                    await update.message.reply_text(parte)
+                    await update.message.reply_text(parte, parse_mode="Markdown")
         else:
-            await update.message.reply_text("LA TUA SCHEDA PERSONALIZZATA\n\n" + scheda_testo)
+            await update.message.reply_text(
+                "LA TUA SCHEDA PERSONALIZZATA\n\n" + scheda_testo,
+                parse_mode="Markdown"
+            )
 
         await update.message.reply_text(
             "Scheda creata! Hai domande o vuoi modifiche? Scrivimi!\n\n"
